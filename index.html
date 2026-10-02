@@ -75,6 +75,14 @@ const Vapi=await new Promise((res,rej)=>{if(window.Vapi)return res(window.Vapi);
 // ask for the mic up front so a blocked mic says so plainly instead of a silent one-way call
 try{const ms=await navigator.mediaDevices.getUserMedia({audio:true});ms.getTracks().forEach(t=>t.stop());}
 catch(e){st.textContent='Solomon cannot hear you: the microphone is blocked ('+(e&&e.name||'denied')+'). Allow the mic for this page in the browser\'s address bar, then reload.';throw e;}
+/* Elisha 2026-10-02: text came through but no voice. The SDK plays Solomon through an <audio> element and deletes it
+   if the browser blocks autoplay (a freshly opened window has no tap yet). Keep blocked players and start them on the
+   first tap instead of losing the voice for the whole call. */
+const blocked=new Set(),play0=HTMLMediaElement.prototype.play;
+HTMLMediaElement.prototype.play=function(){const el=this;return play0.call(el).catch(e=>{
+  if(!e||e.name!=='NotAllowedError')throw e;blocked.add(el);st.textContent='Tap anywhere to hear Solomon';}) ;};
+const unlock=()=>{blocked.forEach(el=>play0.call(el).then(()=>blocked.delete(el)).catch(()=>{}));if(!blocked.size&&live)st.textContent='Connected. Just talk.';};
+['pointerdown','keydown','touchend'].forEach(t=>addEventListener(t,unlock,true));
 const vapi=new Vapi(cfg.pk);
 let live=false,starting=false;
 st.textContent='Tap the cat to talk';
@@ -92,7 +100,9 @@ vapi.on('speech-end',()=>{orb.classList.remove('talking');if(live)st.textContent
 vapi.on('message',m=>{if(m&&m.type==='transcript'&&m.transcriptType==='final')line(m.role==='user'?'You':'Solomon',m.transcript,m.role==='user');
   if(m&&m.type==='transcript'&&m.role==='user'){orb.classList.toggle('you',m.transcriptType==='partial');}});
 vapi.on('error',e=>{starting=false;st.textContent='Trouble on the line: '+((e&&(e.errorMsg||e.message))||'unknown');});
-// start the call as soon as the page opens; if iOS wants a tap first, the cat is right there
-if(AUTO)start();
+// start at once when the browser already allows sound (Elisha 2026-10-01: open the app and be in the conversation);
+// otherwise wait for one tap on the cat so his voice is never blocked
+const canSound=!navigator.userActivation||navigator.userActivation.hasBeenActive;
+if(AUTO&&canSound)start();else st.textContent='Tap the cat to talk to Solomon';
 </script>
 </body></html>
