@@ -44,6 +44,7 @@ form button{margin-top:14px;background:var(--gold);border:0;border-radius:8px;pa
   <label>Solomon web key</label><input name="wk" type="password" autocomplete="off">
   <button>Save on this device</button></form>
 <script type="module">
+// top-level await needs a module script
 const $=id=>document.getElementById(id), orb=$('orb'), st=$('state'), log=$('log');
 const ok=v=>v&&!/^<\?/.test(v);
 let cfg=window.CFG||{};
@@ -66,9 +67,14 @@ if(!ok(cfg.pk)||!ok(cfg.aid)||!ok(cfg.wk)){
   throw new Error('setup');
 }
 st.textContent='Loading…';
-let Vapi;
-try{({default:Vapi}=await import('https://cdn.jsdelivr.net/npm/@vapi-ai/web/+esm'));}
-catch(e){st.textContent='Could not load the voice library. Check the connection and reload.';throw e;}
+/* The Vapi SDK is bundled into vapi.js in this repo (esbuild of @vapi-ai/web 2.7.1): the jsdelivr +esm build never
+   finished loading (Elisha, 2026-10-02: stuck on Loading). */
+const Vapi=await new Promise((res,rej)=>{if(window.Vapi)return res(window.Vapi);const s=document.createElement('script');s.src='vapi.js?v=271';
+  s.onload=()=>window.Vapi?res(window.Vapi):rej(new Error('voice library loaded but empty'));s.onerror=()=>rej(new Error('voice library failed to load'));
+  document.head.append(s);setTimeout(()=>rej(new Error('voice library timed out')),15000);}).catch(e=>{st.textContent='Could not load the voice library ('+e.message+'). Reload to try again.';throw e;});
+// ask for the mic up front so a blocked mic says so plainly instead of a silent one-way call
+try{const ms=await navigator.mediaDevices.getUserMedia({audio:true});ms.getTracks().forEach(t=>t.stop());}
+catch(e){st.textContent='Solomon cannot hear you: the microphone is blocked ('+(e&&e.name||'denied')+'). Allow the mic for this page in the browser\'s address bar, then reload.';throw e;}
 const vapi=new Vapi(cfg.pk);
 let live=false,starting=false;
 st.textContent='Tap the cat to talk';
