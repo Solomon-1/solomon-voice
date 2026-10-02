@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Solomon">
+<meta name="theme-color" content="#0d1020">
+<title>Solomon</title>
+<!--
+  Solomon voice (GitHub Pages copy of elisha-os apps-script/AgentInbox/jarvis-voice.html; keep the two in step): a live voice call to the SAME Vapi assistant as the phone line (one brain, owned by the
+  "Hey Jarvis wake phrases" thread). It is hosted outside claude.ai because the claude.ai frame blocks the mic.
+  Keys are never in this file or this repo. The Agent Tower's "Talk live" button opens this page with
+  #cfg=<base64 {pk, aid, wk}> read from Elisha's own Drive; the page keeps them in this browser only and strips the hash.
+-->
+<style>
+:root{--bg:#0d1020;--ink:#f3ead7;--muted:#a69f8f;--gold:#e0b25a;--red:#d8645a;--card:#171b31}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:17px/1.4 Georgia,'Times New Roman',serif}
+body{display:flex;flex-direction:column;align-items:center;padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom))}
+h1{font-size:15px;letter-spacing:.3em;color:var(--gold);margin:8px 0 0;font-weight:normal}
+#state{color:var(--muted);font-size:14px;min-height:20px;margin:4px 0 0;text-align:center}
+#orb{margin:auto 0 18px;width:min(62vw,260px);aspect-ratio:1;border-radius:50%;border:2px solid var(--gold);background:radial-gradient(circle at 50% 40%,#2a2f52,#10132a 70%);
+  color:var(--ink);font:inherit;font-size:64px;display:grid;place-items:center;cursor:pointer;transition:transform .15s,box-shadow .2s;-webkit-tap-highlight-color:transparent}
+#orb.live{box-shadow:0 0 0 6px rgba(224,178,90,.18)}
+#orb.talking{transform:scale(1.06);box-shadow:0 0 0 14px rgba(224,178,90,.28)}
+#orb.you{box-shadow:0 0 0 14px rgba(140,200,255,.25)}
+#hint{color:var(--muted);font-size:14px;text-align:center;margin:0 0 auto}
+#log{width:100%;max-width:560px;max-height:32vh;overflow:auto;margin:12px 0 0;font-size:15px}
+#log p{margin:6px 0}#log b{color:var(--gold);font-weight:normal}#log .me b{color:#8cc8ff}
+#end{display:none;margin-top:12px;background:var(--red);color:#fff;border:0;border-radius:24px;padding:10px 28px;font:inherit}
+form{display:none;width:100%;max-width:420px;background:var(--card);padding:16px;border-radius:12px;margin:auto 0}
+form label{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}form input{width:100%;padding:10px;border-radius:8px;border:1px solid #444;background:#0d1020;color:var(--ink);font:15px monospace}
+form button{margin-top:14px;background:var(--gold);border:0;border-radius:8px;padding:10px 18px;font:inherit}
+</style></head><body>
+<h1>Solomon</h1>
+<p id="state">Tap the cat to talk</p>
+<button id="orb" aria-label="Talk to Solomon">🐈‍⬛</button>
+<p id="hint">Same Solomon as the phone line. Tap again to hang up.</p>
+<div id="log" aria-live="polite"></div>
+<button id="end">Hang up</button>
+<form id="setup"><b>One-time setup on this device</b>
+  <label>Vapi public key</label><input name="pk" autocomplete="off">
+  <label>Assistant id</label><input name="aid" autocomplete="off">
+  <label>Solomon web key</label><input name="wk" type="password" autocomplete="off">
+  <button>Save on this device</button></form>
+<script type="module">
+const $=id=>document.getElementById(id), orb=$('orb'), st=$('state'), log=$('log');
+const ok=v=>v&&!/^<\?/.test(v);
+let cfg=window.CFG||{};
+/* Apps Script blocks the mic inside its iframe, so the owner-only Apps Script page is only the setup step: it hands
+   the three values to the static app in the URL hash (never sent to any server), which keeps them on this device. */
+if(ok(cfg.pk)&&ok(cfg.app)){
+  orb.style.display='none';$('hint').style.display='none';
+  const a=document.createElement('a');a.href=cfg.app+'#cfg='+encodeURIComponent(btoa(JSON.stringify({pk:cfg.pk,aid:cfg.aid,wk:cfg.wk})));
+  a.target='_top';a.textContent='Open the Solomon app';a.style.cssText='margin:auto;color:#0d1020;background:#e0b25a;padding:14px 26px;border-radius:24px;text-decoration:none';
+  st.textContent='One-time setup: tap below, then Share, Add to Home Screen.';document.body.insertBefore(a,log);
+  throw new Error('handoff');
+}
+if(/#cfg=/.test(location.hash)){try{const c=JSON.parse(atob(decodeURIComponent(location.hash.split('#cfg=')[1])));localStorage.setItem('jarvis-cfg',JSON.stringify(c));}catch(e){}
+  history.replaceState(null,'',location.pathname+location.search);}
+if(!ok(cfg.pk)){try{cfg=JSON.parse(localStorage.getItem('jarvis-cfg')||'{}')}catch(e){cfg={}}}
+if(!ok(cfg.pk)||!ok(cfg.aid)||!ok(cfg.wk)){
+  orb.style.display='none';$('hint').style.display='none';const f=$('setup');f.style.display='block';
+  f.onsubmit=e=>{e.preventDefault();const c={pk:f.pk.value.trim(),aid:f.aid.value.trim(),wk:f.wk.value.trim()};
+    try{localStorage.setItem('jarvis-cfg',JSON.stringify(c))}catch(e){}location.reload();};
+  throw new Error('setup');
+}
+st.textContent='Loading…';
+let Vapi;
+try{({default:Vapi}=await import('https://cdn.jsdelivr.net/npm/@vapi-ai/web/+esm'));}
+catch(e){st.textContent='Could not load the voice library. Check the connection and reload.';throw e;}
+const vapi=new Vapi(cfg.pk);
+let live=false,starting=false;
+st.textContent='Tap the cat to talk';
+const AUTO=!/[?&]auto=0/.test(location.search);/* Elisha 2026-10-01: open the app and be in the conversation at once */
+function line(who,text,me){const p=document.createElement('p');if(me)p.className='me';p.innerHTML='<b></b> ';p.firstChild.textContent=who+':';p.append(text);log.append(p);log.scrollTop=log.scrollHeight;}
+async function start(){if(live||starting)return;starting=true;st.textContent='Ringing the penthouse…';
+  try{await vapi.start(cfg.aid,{variableValues:{jarvis_web_key:cfg.wk,caller_name:'Elisha',direction:'web',context:''}});}
+  catch(e){starting=false;st.textContent='Could not connect: '+(e&&e.message||e);}}
+function stop(){vapi.stop();}
+orb.onclick=()=>live?stop():start();$('end').onclick=stop;
+vapi.on('call-start',()=>{live=true;starting=false;orb.classList.add('live');$('end').style.display='block';st.textContent='Connected. Just talk.';});
+vapi.on('call-end',()=>{live=false;starting=false;orb.className='';$('end').style.display='none';st.textContent='Call ended. Tap the cat to talk again.';});
+vapi.on('speech-start',()=>{orb.classList.add('talking');st.textContent='Solomon is speaking';});
+vapi.on('speech-end',()=>{orb.classList.remove('talking');if(live)st.textContent='Listening';});
+vapi.on('message',m=>{if(m&&m.type==='transcript'&&m.transcriptType==='final')line(m.role==='user'?'You':'Solomon',m.transcript,m.role==='user');
+  if(m&&m.type==='transcript'&&m.role==='user'){orb.classList.toggle('you',m.transcriptType==='partial');}});
+vapi.on('error',e=>{starting=false;st.textContent='Trouble on the line: '+((e&&(e.errorMsg||e.message))||'unknown');});
+// start the call as soon as the page opens; if iOS wants a tap first, the cat is right there
+if(AUTO)start();
+</script>
+</body></html>
