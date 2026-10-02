@@ -1,0 +1,8 @@
+# Default gitleaks rules, plus one exception: vapi.js is the minified third-party Vapi SDK bundle (built with esbuild
+# from @vapi-ai/web), whose long identifiers trip the generic-key rule. Nothing of ours lives in it.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "third-party minified SDK bundle"
+paths = ['''^vapi\.js$''']
